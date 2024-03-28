@@ -1,6 +1,6 @@
 defmodule Runic.Compiler.Literal do
   alias Runic.Compiler.Expression
-  alias Runic.AST.Literal.{Primitive, Array, Object}
+  alias Runic.AST.{Primitive, Array, Object}
 
   defguardp is_primitive(ast)
             when is_number(ast) or is_boolean(ast) or is_atom(ast) or is_binary(ast)
