@@ -24,6 +24,13 @@ defmodule Runic.Compiler do
     |> IO.iodata_to_binary()
   end
 
+  def codegen(ast) do
+    transform(ast)
+    |> IO.inspect()
+    |> emit()
+    |> IO.puts()
+  end
+
   # Literals that return themselves when quoted, including:
   # atoms, numbers, lists, strings, and tuples with two elements
   defguardp is_primitive(term) when is_atom(term) or is_number(term) or is_binary(term)
@@ -76,6 +83,12 @@ defmodule Runic.Compiler do
   defp compile({operator, _meta, [_fst, _snd] = args}, opts) when operator in @binary_operators,
     do: compile_binary(operator, args, opts)
 
+  # Dot access call
+  defp compile({:., _meta, args}, _opts), do: compile_access(args)
+
+  # All other calls 
+  defp compile({name, meta, args}, _opts), do: compile_call(name, args, meta)
+
   defp compile_literal(term) when is_primitive(term),
     do: AST.Literal.new(term)
 
@@ -88,7 +101,7 @@ defmodule Runic.Compiler do
   defp compile_literal(:%{}, args),
     do: AST.Literal.new(:object, Enum.map(args, fn {k, v} -> {compile(k), compile(v)} end))
 
-  defp compile_variable(name), do: AST.Variable.new(name)
+  defp compile_variable(name), do: AST.Identifier.new(:var, name)
 
   defp compile_block(body), do: compile_block(body, [])
 
@@ -98,6 +111,7 @@ defmodule Runic.Compiler do
 
   # JavaScript operator precedences
   # Reference: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_precedence#table
+  @call_prec {:left, 17}
   @prefix_prec {:unary, 14}
   @exp_prec {:right, 13}
   @factor_prec {:left, 12}
@@ -110,6 +124,7 @@ defmodule Runic.Compiler do
   @precedences %{
     # prefix includes unary +, -, and !
     :prefix => @prefix_prec,
+    :. => @call_prec,
     :** => @exp_prec,
     :* => @factor_prec,
     :/ => @factor_prec,
@@ -161,6 +176,28 @@ defmodule Runic.Compiler do
       node
     end
   end
+
+  # Annoymous function call
+  defp compile_access([name]), do: compile(name)
+
+  # Access an erlang module function like `:mod.fun`
+  defp compile_access([mod, fun]) when is_atom(mod) and is_atom(fun),
+    do: AST.Identifier.new(:fun, {mod, fun})
+
+  # Access an elixir module function like `Mod.fun`
+  defp compile_access([{:__aliases__, meta, parts}, fun]),
+    do: AST.Identifier.new(:fun, {meta[:alias] || Module.concat(parts), fun})
+
+  # Field access like `foo.bar`
+  defp compile_access([root, key]), do: AST.Access.new(compile(root), key)
+
+  # Non-qualified function call like `fun()`
+  defp compile_call(name, args, meta) when is_atom(name),
+    do: AST.Call.new(AST.Identifier.new(:var, name), Enum.map(args, &compile/1), meta)
+
+  # All other calls
+  defp compile_call(name, args, meta),
+    do: AST.Call.new(compile(name), Enum.map(args, &compile/1), meta)
 
   defp precedences, do: @precedences
   defp get_precedence(op), do: Map.get(precedences(), op, {:unary, 0})

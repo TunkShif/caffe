@@ -1,5 +1,13 @@
 defprotocol Runic.AST do
-  @type t :: Literal.t() | Variable.t() | Block.t()
+  @type t ::
+          Runic.AST.Literal.t()
+          | Runic.AST.Identifier.t()
+          | Runic.AST.Group.t()
+          | Runic.AST.Block.t()
+          | Runic.AST.Unary.t()
+          | Runic.AST.Binary.t()
+          | Runic.AST.Access.t()
+          | Runic.AST.Call.t()
 
   @doc """
   Build algebra documents from Runic AST.
@@ -9,10 +17,14 @@ defprotocol Runic.AST do
 end
 
 defmodule Runic.AST.Literal do
-  @type t :: %__MODULE__{type: type(), value: value()}
-  @type type :: :number | :string | :boolean | :null | :array | :object
-  @type value :: number() | String.t() | boolean() | nil | list()
+  @type t ::
+          %__MODULE__{type: :number, value: number()}
+          | %__MODULE__{type: :string, value: String.t()}
+          | %__MODULE__{type: :null, value: nil}
+          | %__MODULE__{type: :array, value: [Runic.AST.t()]}
+          | %__MODULE__{type: :object, value: [{Runic.AST.t(), Runic.AST.t()}]}
 
+  @derive [Runic.Resolver]
   defstruct [:type, :value]
 
   def new(type, value), do: %__MODULE__{type: type, value: value}
@@ -55,6 +67,8 @@ defmodule Runic.AST.Literal do
   defp escape_string(<<>>, acc), do: acc
 
   defimpl Runic.AST do
+    alias Runic.AST.Literal
+
     import Inspect.Algebra
 
     def to_doc(%{type: :null}), do: "null"
@@ -70,7 +84,28 @@ defmodule Runic.AST.Literal do
 
     def to_doc(%{type: :object} = literal) do
       opts = %Inspect.Opts{limit: :infinity}
-      fun = fn {key, value}, _opts -> concat([key, ": ", Runic.AST.to_doc(value)]) end
+
+      fun = fn
+        {%Literal{type: :string} = key, value}, _opts ->
+          group(
+            concat([
+              Runic.AST.to_doc(key),
+              ": ",
+              Runic.AST.to_doc(value)
+            ])
+          )
+
+        {key, value}, _opts ->
+          group(
+            concat([
+              "[",
+              Runic.AST.to_doc(key),
+              "]: ",
+              Runic.AST.to_doc(value)
+            ])
+          )
+      end
+
       container_doc("{", literal.value, "}", opts, fun)
     end
 
@@ -78,16 +113,19 @@ defmodule Runic.AST.Literal do
   end
 end
 
-defmodule Runic.AST.Variable do
-  @type t :: %__MODULE__{name: String.t()}
+defmodule Runic.AST.Identifier do
+  # An identifier node represents a variable (like `foo`) or a qualified function (like `:mod.fun` or `Mod.fun`).
+  @type t ::
+          %__MODULE__{type: :var, value: atom()}
+          | %__MODULE__{type: :fun, value: {atom(), atom()}}
 
-  defstruct [:name]
+  defstruct [:type, :value]
 
-  def new(name), do: %__MODULE__{name: name}
+  def new(type, value), do: %__MODULE__{type: type, value: value}
 
   defimpl Runic.AST do
-    def to_doc(variable) do
-      to_string(variable.name)
+    def to_doc(%{type: :var} = identifier) do
+      to_string(identifier.value)
     end
   end
 end
@@ -181,6 +219,54 @@ defmodule Runic.AST.Binary do
           Runic.AST.to_doc(binary.left),
           " #{binary.operator} ",
           Runic.AST.to_doc(binary.right)
+        ])
+      )
+    end
+  end
+end
+
+defmodule Runic.AST.Access do
+  @type t :: %__MODULE__{root: AST.t(), key: atom(), type: type()}
+  @type type :: :dot | :brakcet
+
+  defstruct [:root, :key, :type]
+
+  def new(root, key, type \\ :dot), do: %__MODULE__{root: root, key: key, type: type}
+
+  defimpl Runic.AST do
+    import Inspect.Algebra
+
+    def to_doc(access) do
+      group(
+        concat([
+          Runic.AST.to_doc(access.root),
+          ".",
+          to_string(access.key)
+        ])
+      )
+    end
+  end
+end
+
+defmodule Runic.AST.Call do
+  @type t :: %__MODULE__{name: Runic.AST.t(), args: [Runic.AST.t()], no_parens: boolean()}
+
+  defstruct [:name, :args, :no_parens]
+
+  def new(name, args, opts \\ []),
+    do: %__MODULE__{name: name, args: args, no_parens: Keyword.get(opts, :no_parens, false)}
+
+  defimpl Runic.AST do
+    import Inspect.Algebra
+
+    def to_doc(call) do
+      opts = %Inspect.Opts{limit: :infinity}
+      fun = fn e, _opts -> Runic.AST.to_doc(e) end
+
+      group(
+        concat([
+          Runic.AST.to_doc(call.name),
+          container_doc("(", call.args, ")", opts, fun)
         ])
       )
     end
