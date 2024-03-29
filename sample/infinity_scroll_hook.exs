@@ -42,7 +42,7 @@ defmodule InfinityScrollHook do
     end)
   end
 
-  defun updated(@self = self) do
+  defunp updated(@self = self) do
     Object.set(self, :pending, Object.send(self, :page))
   end
 end
