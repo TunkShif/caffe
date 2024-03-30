@@ -62,6 +62,10 @@ defimpl Runic.Resolver, for: Runic.AST.Call do
   end
 
   def resolve(call) do
-    Runic.Resolver.resolve(call)
+    %Runic.AST.Call{
+      call
+      | name: Runic.Resolver.resolve(call.name),
+        args: Enum.map(call.args, &Runic.Resolver.resolve/1)
+    }
   end
 end

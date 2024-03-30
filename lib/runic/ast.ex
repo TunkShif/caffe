@@ -114,10 +114,10 @@ defmodule Runic.AST.Literal do
 end
 
 defmodule Runic.AST.Identifier do
-  # An identifier node represents a variable (like `foo`) or a qualified function (like `:mod.fun` or `Mod.fun`).
+  # An identifier node represents a variable (like `foo`) or a module name (like `:mod` or `Mod`).
   @type t ::
           %__MODULE__{type: :var, value: atom()}
-          | %__MODULE__{type: :fun, value: {atom(), atom()}}
+          | %__MODULE__{type: :mod, value: atom()}
 
   defstruct [:type, :value]
 
@@ -126,6 +126,11 @@ defmodule Runic.AST.Identifier do
   defimpl Runic.AST do
     def to_doc(%{type: :var} = identifier) do
       to_string(identifier.value)
+    end
+
+    def to_doc(%{type: :mod} = identifier) do
+      # TODO: format module name
+      inspect(identifier.value)
     end
   end
 end
@@ -226,7 +231,7 @@ defmodule Runic.AST.Binary do
 end
 
 defmodule Runic.AST.Access do
-  @type t :: %__MODULE__{root: AST.t(), key: atom(), type: type()}
+  @type t :: %__MODULE__{root: Runic.AST.t(), key: Runic.AST.t(), type: type()}
   @type type :: :dot | :brakcet
 
   defstruct [:root, :key, :type]
@@ -236,12 +241,23 @@ defmodule Runic.AST.Access do
   defimpl Runic.AST do
     import Inspect.Algebra
 
-    def to_doc(access) do
+    def to_doc(%{type: :dot} = access) do
       group(
         concat([
           Runic.AST.to_doc(access.root),
           ".",
-          to_string(access.key)
+          Runic.AST.to_doc(access.key)
+        ])
+      )
+    end
+
+    def to_doc(%{type: :bracket} = access) do
+      group(
+        concat([
+          Runic.AST.to_doc(access.root),
+          "[",
+          Runic.AST.to_doc(access.key),
+          "]"
         ])
       )
     end
@@ -271,4 +287,17 @@ defmodule Runic.AST.Call do
       )
     end
   end
+end
+
+defmodule Runic.Function do
+  @type t :: %__MODULE__{
+          mod: atom(),
+          name: atom(),
+          params: [atom()],
+          body: Runic.AST.Block.t(),
+          async: boolean(),
+          receiver: boolean()
+        }
+
+  defstruct [:mod, :name, :params, :body, :async, :receiver]
 end
