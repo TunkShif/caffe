@@ -210,13 +210,13 @@ defmodule Caffe.Compiler do
   end
 
   # Check if a non-qualified call is a macro call
-  defp compile_external({fun, _meta, args} = ast, ctx) when is_atom(fun) do
+  defp compile_external({fun, meta, args} = ast, ctx) when is_atom(fun) do
     imported = Macro.Env.lookup_import(ctx.env, {fun, length(args)})
 
     if Enum.any?(imported, &match?({:macro, _}, &1)) do
       Macro.expand(ast, ctx.env) |> compile(ctx)
     else
-      compile_external(ast, ctx)
+      compile_call(fun, args, meta, ctx)
     end
   end
 

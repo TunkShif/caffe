@@ -63,6 +63,8 @@ defmodule Caffe.CompilerTest do
     test "non-qualified function call" do
       assert_compiled(quote(do: foo), "foo")
       assert_compiled(quote(do: foo()), "foo()")
+      assert_compiled(quote(do: foo(123)), "foo(123)")
+      assert_compiled(quote(do: foo(a, b)), "foo(a, b)")
     end
 
     test "qualified function call" do
