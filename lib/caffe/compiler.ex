@@ -23,8 +23,8 @@ defmodule Caffe.Compiler do
     ]
 
     def new(mod: mod) when is_atom(mod) do
-      if function_exported?(mod, :__runic_env__, 0) do
-        %__MODULE__{mod: mod, env: mod.__runic_env__()}
+      if function_exported?(mod, :__caffe_env__, 0) do
+        %__MODULE__{mod: mod, env: mod.__caffe_env__()}
       else
         raise "#{inspect(mod)} is not a Caffe module."
       end

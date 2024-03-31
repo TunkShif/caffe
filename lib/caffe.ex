@@ -5,7 +5,7 @@ defmodule Caffe do
 
   defmacro __using__(_) do
     quote do
-      Module.register_attribute(__MODULE__, :runic_function, accumulate: true)
+      Module.register_attribute(__MODULE__, :caffe_function, accumulate: true)
       @before_compile Caffe.Builder
 
       import Caffe, only: [defun: 2, defun: 3, defunp: 2, defunp: 3]
@@ -16,7 +16,7 @@ defmodule Caffe do
 
   defmacro defun(head, opts \\ [], do: body) do
     quote do
-      @runic_function unquote(Macro.escape({head, body, opts}))
+      @caffe_function unquote(Macro.escape({head, body, opts}))
       def unquote(head) do
         raise "Caffe module function cannot be called in BEAM runtime."
         unquote(body)
@@ -26,9 +26,9 @@ defmodule Caffe do
 
   defmacro __before_compile__(_env) do
     quote do
-      def __runic_env__, do: __ENV__
+      def __caffe_env__, do: __ENV__
 
-      def __runic_functions__, do: @runic_function
+      def __caffe_functions__, do: @caffe_function
     end
   end
 end
