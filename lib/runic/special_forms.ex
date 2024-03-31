@@ -16,12 +16,12 @@ defmodule Runic.SpecialForms do
 
   Enum.each(@builtins, fn {name, arity} ->
     def unquote(name)(unquote_splicing(Macro.generate_arguments(arity, __MODULE__))),
-      do: error(unquote({name, arity}))
+      do: error!(unquote({name, arity}))
   end)
 
-  defp error({name, arity}) do
+  defp error!({name, arity}) do
     raise(
-      "Runic function #{inspect(__MODULE__)}.#{name}/#{arity} cannot be called in BEAM runtime."
+      "Runic function #{inspect(__MODULE__)}.#{name}/#{arity} cannot be invoked directly in BEAM runtime."
     )
   end
 end

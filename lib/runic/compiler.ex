@@ -1,51 +1,65 @@
 defmodule Runic.Compiler do
   alias Runic.AST
 
-  @type context :: %{
-          env: Macro.Env.t(),
-          # track the operator of the parent node
-          parent: atom(),
-          # track the current branch if parent is a binary expression
-          branch: :left | :right | nil
+  defmodule Context do
+    @moduledoc false
+
+    @type t :: %__MODULE__{
+            mod: atom(),
+            env: Macro.Env.t(),
+            parent: atom(),
+            branch: :left | :right | nil
+          }
+
+    defstruct [
+      # the current compiling module
+      :mod,
+      # the current compiling environment
+      :env,
+      # track the operator of the parent node
+      :parent,
+      # track the current branch if parent is a binary expression
+      :branch
+    ]
+
+    def new(mod: mod) when is_atom(mod) do
+      if function_exported?(mod, :__runic_env__, 0) do
+        %__MODULE__{
+          mod: mod,
+          env: mod.__runic_env__()
         }
+      else
+        raise "#{inspect(mod)} is not a Runic module."
+      end
+    end
 
-  def codegen(ast, env \\ nil) do
-    context = %{
-      env: env || __ENV__,
-      parent: nil,
-      branch: nil
-    }
-
-    o = compile(ast, context)
-
-    IO.puts("+========= runic ast =========+")
-    IO.inspect(o)
-    IO.puts("+========= runic ast =========+\n")
-
-    IO.puts("+========= codegen output =========+")
-
-    AST.to_doc(o)
-    |> Inspect.Algebra.format(100)
-    |> IO.iodata_to_binary()
-    |> IO.puts()
-
-    IO.puts("+========= codegen output =========+\n")
+    def new(env: %Macro.Env{} = env) do
+      %__MODULE__{
+        mod: nil,
+        env: env
+      }
+    end
   end
 
+  @doc """
+  Compiles a quoted expression into JavaScript code.
+  """
   @spec compile_quoted(Macro.t(), Macro.Env.t()) :: String.t()
   def compile_quoted(quoted, env) do
-    context = %{
-      env: env,
-      parent: nil,
-      branch: nil
-    }
+    context = Context.new(env: env)
 
     compile(quoted, context)
-    |> Runic.Resolver.resolve()
-    |> AST.to_doc()
-    |> Inspect.Algebra.format(100)
-    |> IO.iodata_to_binary()
+    |> resolve()
+    |> codegen()
   end
+
+  defp resolve(ast), do: Runic.Resolver.resolve(ast)
+
+  defp codegen(ast, opts \\ []),
+    do:
+      Runic.AST.to_doc(ast)
+      |> Inspect.Algebra.format(opts[:width] || 120)
+      |> IO.iodata_to_binary()
 
   # Compiles literals that return themselves when quoted, including:
   # atoms, numbers, lists, strings, and tuples with two elements
@@ -62,21 +76,70 @@ defmodule Runic.Compiler do
   # All the left code structures are just function calls,
   # which have AST like: `{fun, meta, args}`
 
+  # Compiles builtin function calls from `Kernel` and `Kernel.SpecialForms` modules
+  # Runic compiler only supports the following functions as builtins, all other calls
+  # would be considered as remote function calls
+  @builtins [
+    :*,
+    :/,
+    :+,
+    :-,
+    :=,
+    :<,
+    :>,
+    :**,
+    :<=,
+    :>=,
+    :==,
+    :!=,
+    :===,
+    :!==,
+    :&&,
+    :||,
+    :|>,
+    :!,
+    :.,
+    :{},
+    :%{},
+    :and,
+    :or,
+    :not,
+    :fn,
+    :if,
+    :unless,
+    :case,
+    :cond,
+    :try,
+    :match?,
+    :raise,
+    :sigil_r,
+    :tap,
+    :then,
+    :__aliases__,
+    :__block__
+  ]
+
+  defp compile({fun, _meta, args} = ast, ctx) when fun in @builtins and is_list(args),
+    do: compile_builtin(ast, ctx)
+
+  # Compiles all other function calls 
+  defp compile({_fun, _meta, args} = ast, ctx) when is_list(args), do: compile_external(ast, ctx)
+
   # Compiles tuple and map literals
-  @constructors [:{}, :%{}, :<<>>]
-  defp compile({constructor, _meta, args}, ctx) when constructor in @constructors,
+  @constructors [:{}, :%{}]
+  defp compile_builtin({constructor, _meta, args}, ctx) when constructor in @constructors,
     do: compile_literal(constructor, args, ctx)
 
   # Compiles aliased module name
-  defp compile({:__aliases__, _meta, _args} = ast, ctx),
+  defp compile_builtin({:__aliases__, _meta, _args} = ast, ctx),
     do: compile_identifier(:mod, Macro.expand(ast, ctx.env), ctx)
 
   # Compiles code block
-  defp compile({:__block__, _meta, body}, ctx), do: compile_block(body, ctx)
+  defp compile_builtin({:__block__, _meta, body}, ctx), do: compile_block(body, ctx)
 
   # Compiles unary operators
   @unary_operators [:+, :-, :!, :not]
-  defp compile({operator, _meta, [arg]}, ctx) when operator in @unary_operators,
+  defp compile_builtin({operator, _meta, [arg]}, ctx) when operator in @unary_operators,
     do: compile_unary(operator, arg, ctx)
 
   # Compiles binary operators
@@ -99,14 +162,21 @@ defmodule Runic.Compiler do
     :||,
     :or
   ]
-  defp compile({operator, _meta, [_fst, _snd] = args}, ctx) when operator in @binary_operators,
-    do: compile_binary(operator, args, ctx)
+  defp compile_builtin({operator, _meta, [_fst, _snd] = args}, ctx)
+       when operator in @binary_operators,
+       do: compile_binary(operator, args, ctx)
 
   # Compiles dot access syntax
-  defp compile({:., _meta, args}, ctx), do: compile_access(args, :dot, ctx)
+  defp compile_builtin({:., _meta, args}, ctx), do: compile_access(args, :dot, ctx)
+
+  # Expand some macros from Kernel module
+  @kernel_macros [:|>, :if, :unless, :tap, :then, :match?]
+  defp compile_builtin({name, _meta, _args} = ast, ctx) when name in @kernel_macros,
+    do: Macro.expand(ast, ctx.env) |> compile(ctx)
 
   # Compiles bracket access syntax
-  defp compile({{:., meta, [Access, :get]}, _meta, [root, key]} = ast, ctx) do
+  # bracket access like `foo[:bar]` is expanded to `Access.get(foo, :bar)`
+  defp compile_external({{:., meta, [Access, :get]}, _meta, [root, key]} = ast, ctx) do
     if meta[:from_brackets] do
       compile_access([root, key], :bracket, ctx)
     else
@@ -114,8 +184,7 @@ defmodule Runic.Compiler do
     end
   end
 
-  # Compiles all other function calls 
-  defp compile({name, meta, args}, ctx), do: compile_call(name, args, meta, ctx)
+  defp compile_external({name, meta, args}, ctx), do: compile_call(name, args, meta, ctx)
 
   defp compile_literal(term, _ctx) when is_primitive(term), do: AST.Literal.new(term)
 
@@ -135,10 +204,11 @@ defmodule Runic.Compiler do
   defp compile_identifier(type, name, _ctx), do: AST.Identifier.new(type, name)
 
   defp compile_block(body, ctx), do: compile_block(body, [], ctx)
-
   defp compile_block([], _acc, _ctx), do: AST.Block.new([])
   defp compile_block([last], acc, ctx), do: AST.Block.new(Enum.reverse(acc), compile(last, ctx))
-  defp compile_block([node | rest], acc, ctx), do: compile_block(rest, [compile(node, ctx) | acc])
+
+  defp compile_block([node | rest], acc, ctx),
+    do: compile_block(rest, [compile(node, ctx) | acc], ctx)
 
   # JavaScript operator precedences
   # Reference: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Operator_precedence#table
@@ -195,8 +265,8 @@ defmodule Runic.Compiler do
   defp compile_binary(:or, args, ctx), do: compile_binary(:||, args, ctx)
 
   defp compile_binary(operator, [fst, snd], ctx) do
-    parent = ctx[:parent]
-    branch = ctx[:branch]
+    parent = ctx.parent
+    branch = ctx.branch
 
     node =
       AST.Binary.new(

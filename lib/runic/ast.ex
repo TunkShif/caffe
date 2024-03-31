@@ -8,6 +8,7 @@ defprotocol Runic.AST do
           | Runic.AST.Binary.t()
           | Runic.AST.Access.t()
           | Runic.AST.Call.t()
+          | Runic.AST.Function.t()
 
   @doc """
   Build algebra documents from Runic AST.
@@ -289,15 +290,20 @@ defmodule Runic.AST.Call do
   end
 end
 
-defmodule Runic.Function do
+defmodule Runic.AST.Function do
   @type t :: %__MODULE__{
-          mod: atom(),
+          mod: Runic.AST.Identifier.t(),
           name: atom(),
-          params: [atom()],
+          arity: non_neg_integer(),
+          params: [param()],
+          guard: Runic.AST.t() | nil,
           body: Runic.AST.Block.t(),
           async: boolean(),
-          receiver: boolean()
+          receiver: boolean(),
+          exported: boolean()
         }
 
-  defstruct [:mod, :name, :params, :body, :async, :receiver]
+  @type param :: atom() | {atom(), term()}
+
+  defstruct [:mod, :name, :arity, :params, :guard, :body, :async, :receiver, :exported]
 end
