@@ -121,20 +121,6 @@ defmodule Runic.Compiler do
   defp compile({fun, _meta, args} = ast, ctx) when fun in @builtins and is_list(args),
     do: compile_builtin(ast, ctx)
 
-  # Compiles qualified Kernel function calls
-  defp compile(
-         {{:., _, [{:__aliases__, _, _args} = aliases, fun]}, meta, args} = ast,
-         ctx
-       ) do
-    mod = Macro.expand(aliases, ctx.env)
-
-    if mod in [Kernel, Kernel.SpecialForms] do
-      compile_builtin({fun, meta, args}, ctx)
-    else
-      compile_external(ast, ctx)
-    end
-  end
-
   # Compiles all other function calls 
   defp compile({_fun, _meta, args} = ast, ctx) when is_list(args),
     do: compile_external(ast, ctx)
@@ -202,8 +188,40 @@ defmodule Runic.Compiler do
     end
   end
 
-  defp compile_external({name, meta, args}, ctx),
-    do: compile_call(name, args, meta, ctx)
+  # Check if a qualified call is a kernel function call or a macro call
+  defp compile_external(
+         {{:., _, [{:__aliases__, _, _args} = aliases, fun]}, meta, args} = ast,
+         ctx
+       ) do
+    mod = Macro.expand(aliases, ctx.env)
+
+    cond do
+      # Check if it is a qualified kernel function call
+      mod in [Kernel, Kernel.SpecialForms] ->
+        compile_builtin({fun, meta, args}, ctx)
+
+      # Check if it is a macro call
+      macro_exported?(mod, fun, length(args)) ->
+        Macro.expand(ast, ctx.env) |> compile(ctx)
+
+      true ->
+        compile_external(ast, ctx)
+    end
+  end
+
+  # Check if a non-qualified call is a macro call
+  defp compile_external({fun, _meta, args} = ast, ctx) when is_atom(fun) do
+    imported = Macro.Env.lookup_import(ctx.env, {fun, length(args)})
+
+    if Enum.any?(imported, &match?({:macro, _}, &1)) do
+      Macro.expand(ast, ctx.env) |> compile(ctx)
+    else
+      compile_external(ast, ctx)
+    end
+  end
+
+  defp compile_external({fun, meta, args}, ctx),
+    do: compile_call(fun, args, meta, ctx)
 
   defp compile_literal(term, _ctx) when is_primitive(term), do: AST.Literal.new(term)
 

@@ -73,6 +73,14 @@ defmodule Runic.CompilerTest do
     end
   end
 
+  describe "macro expansion" do
+    test "imported macro call" do
+    end
+
+    test "qualified macro call" do
+    end
+  end
+
   defp assert_compiled(quoted, expected) do
     assert compile_quoted(quoted, __ENV__) == expected
   end
