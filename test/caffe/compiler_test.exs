@@ -1,7 +1,7 @@
-defmodule Runic.CompilerTest do
+defmodule Caffe.CompilerTest do
   use ExUnit.Case
 
-  import Runic.Compiler, only: [compile_quoted: 2]
+  import Caffe.Compiler, only: [compile_quoted: 2]
 
   describe "literals" do
     test "primitives" do

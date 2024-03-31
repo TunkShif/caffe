@@ -1,5 +1,5 @@
-defmodule Runic.Compiler do
-  alias Runic.AST
+defmodule Caffe.Compiler do
+  alias Caffe.AST
 
   defmodule Context do
     @moduledoc false
@@ -26,7 +26,7 @@ defmodule Runic.Compiler do
       if function_exported?(mod, :__runic_env__, 0) do
         %__MODULE__{mod: mod, env: mod.__runic_env__()}
       else
-        raise "#{inspect(mod)} is not a Runic module."
+        raise "#{inspect(mod)} is not a Caffe module."
       end
     end
 
@@ -42,21 +42,21 @@ defmodule Runic.Compiler do
   def compile_quoted(quoted, env), do: transform(quoted, env) |> codegen()
 
   @doc """
-  Transforms quoted expression into Runic AST.
+  Transforms quoted expression into Caffe AST.
   """
-  @spec transform(Macro.t(), Macro.Env.t()) :: Runic.AST.t()
+  @spec transform(Macro.t(), Macro.Env.t()) :: Caffe.AST.t()
   def transform(quoted, env) do
     context = Context.new(env: env)
     compile(quoted, context)
   end
 
   @doc """
-  Generate JavaScript code from Runic AST.
+  Generate JavaScript code from Caffe AST.
   """
-  @spec codegen(Runic.AST.t()) :: String.t()
+  @spec codegen(Caffe.AST.t()) :: String.t()
   def codegen(ast, opts \\ []),
     do:
-      Runic.AST.to_doc(ast)
+      Caffe.AST.to_doc(ast)
       |> Inspect.Algebra.format(opts[:width] || 120)
       |> IO.iodata_to_binary()
 
@@ -76,7 +76,7 @@ defmodule Runic.Compiler do
   # which have AST like: `{fun, meta, args}`
 
   # Compiles builtin function calls from `Kernel` and `Kernel.SpecialForms` modules
-  # Runic compiler only supports the following functions as builtins, all other calls
+  # Caffe compiler only supports the following functions as builtins, all other calls
   # would be considered as remote function calls
   @builtins [
     :*,

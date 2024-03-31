@@ -1,4 +1,4 @@
-defmodule Runic.SpecialForms do
+defmodule Caffe.SpecialForms do
   @builtins [
     new: 2,
     get: 2,
@@ -21,7 +21,7 @@ defmodule Runic.SpecialForms do
 
   defp error!({name, arity}) do
     raise(
-      "Runic function #{inspect(__MODULE__)}.#{name}/#{arity} cannot be invoked directly in BEAM runtime."
+      "Caffe function #{inspect(__MODULE__)}.#{name}/#{arity} cannot be invoked directly in BEAM runtime."
     )
   end
 end

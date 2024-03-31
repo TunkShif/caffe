@@ -1,31 +1,31 @@
-defprotocol Runic.AST do
+defprotocol Caffe.AST do
   @type t ::
-          Runic.AST.Literal.t()
-          | Runic.AST.Identifier.t()
-          | Runic.AST.Group.t()
-          | Runic.AST.Block.t()
-          | Runic.AST.Unary.t()
-          | Runic.AST.Binary.t()
-          | Runic.AST.Access.t()
-          | Runic.AST.Call.t()
-          | Runic.AST.Function.t()
+          Caffe.AST.Literal.t()
+          | Caffe.AST.Identifier.t()
+          | Caffe.AST.Group.t()
+          | Caffe.AST.Block.t()
+          | Caffe.AST.Unary.t()
+          | Caffe.AST.Binary.t()
+          | Caffe.AST.Access.t()
+          | Caffe.AST.Call.t()
+          | Caffe.AST.Function.t()
 
   @doc """
-  Build algebra documents from Runic AST.
+  Build algebra documents from Caffe AST.
   """
   @spec to_doc(t()) :: Inspect.Algebra.t()
   def to_doc(ast)
 end
 
-defmodule Runic.AST.Literal do
+defmodule Caffe.AST.Literal do
   @type t ::
           %__MODULE__{type: :number, value: number()}
           | %__MODULE__{type: :string, value: String.t()}
           | %__MODULE__{type: :null, value: nil}
-          | %__MODULE__{type: :array, value: [Runic.AST.t()]}
-          | %__MODULE__{type: :object, value: [{Runic.AST.t(), Runic.AST.t()}]}
+          | %__MODULE__{type: :array, value: [Caffe.AST.t()]}
+          | %__MODULE__{type: :object, value: [{Caffe.AST.t(), Caffe.AST.t()}]}
 
-  @derive [Runic.Resolver]
+  @derive [Caffe.Resolver]
   defstruct [:type, :value]
 
   def new(type, value), do: %__MODULE__{type: type, value: value}
@@ -67,19 +67,19 @@ defmodule Runic.AST.Literal do
 
   defp escape_string(<<>>, acc), do: acc
 
-  defimpl Runic.AST do
-    alias Runic.AST.Literal
+  defimpl Caffe.AST do
+    alias Caffe.AST.Literal
 
     import Inspect.Algebra
 
     def to_doc(%{type: :null}), do: "null"
 
     def to_doc(%{type: :string} = literal),
-      do: "\"#{Runic.AST.Literal.escape_string(literal.value)}\""
+      do: "\"#{Caffe.AST.Literal.escape_string(literal.value)}\""
 
     def to_doc(%{type: :array} = literal) do
       opts = %Inspect.Opts{limit: :infinity}
-      fun = fn e, _opts -> Runic.AST.to_doc(e) end
+      fun = fn e, _opts -> Caffe.AST.to_doc(e) end
       container_doc("[", literal.value, "]", opts, fun)
     end
 
@@ -90,9 +90,9 @@ defmodule Runic.AST.Literal do
         {%Literal{type: :string} = key, value}, _opts ->
           group(
             concat([
-              Runic.AST.to_doc(key),
+              Caffe.AST.to_doc(key),
               ": ",
-              Runic.AST.to_doc(value)
+              Caffe.AST.to_doc(value)
             ])
           )
 
@@ -100,9 +100,9 @@ defmodule Runic.AST.Literal do
           group(
             concat([
               "[",
-              Runic.AST.to_doc(key),
+              Caffe.AST.to_doc(key),
               "]: ",
-              Runic.AST.to_doc(value)
+              Caffe.AST.to_doc(value)
             ])
           )
       end
@@ -114,7 +114,7 @@ defmodule Runic.AST.Literal do
   end
 end
 
-defmodule Runic.AST.Identifier do
+defmodule Caffe.AST.Identifier do
   # An identifier node represents a variable (like `foo`) or a module name (like `:mod` or `Mod`).
   @type t ::
           %__MODULE__{type: :var, value: atom(), counter: integer() | nil}
@@ -125,7 +125,7 @@ defmodule Runic.AST.Identifier do
   def new(type, value, counter \\ nil),
     do: %__MODULE__{type: type, value: value, counter: counter}
 
-  defimpl Runic.AST do
+  defimpl Caffe.AST do
     def to_doc(%{type: :var} = identifier) do
       to_string(identifier.value)
     end
@@ -137,42 +137,42 @@ defmodule Runic.AST.Identifier do
   end
 end
 
-defmodule Runic.AST.Group do
+defmodule Caffe.AST.Group do
   # The group node wraps an AST node inside a pair of parentheses.
-  @type t :: %__MODULE__{node: Runic.AST.t()}
+  @type t :: %__MODULE__{node: Caffe.AST.t()}
 
   defstruct [:node]
 
   def new(node), do: %__MODULE__{node: node}
 
-  defimpl Runic.AST do
+  defimpl Caffe.AST do
     import Inspect.Algebra
 
     def to_doc(group) do
-      group(concat(["(", Runic.AST.to_doc(group.node), ")"]))
+      group(concat(["(", Caffe.AST.to_doc(group.node), ")"]))
     end
   end
 end
 
-defmodule Runic.AST.Block do
+defmodule Caffe.AST.Block do
   # The `body` field contains a list of AST nodes except the last one from the original Elixir AST node,
   # the last node from the original Elixir AST is stored in the `return` field.
-  @type t :: %__MODULE__{body: [Runic.AST.t()], return: Runic.AST.t() | nil}
+  @type t :: %__MODULE__{body: [Caffe.AST.t()], return: Caffe.AST.t() | nil}
 
   defstruct [:body, :return]
 
   def new(body, return \\ nil), do: %__MODULE__{body: body, return: return}
 end
 
-defmodule Runic.AST.Unary do
-  @type t :: %__MODULE__{operator: operator(), value: Runic.AST.t()}
+defmodule Caffe.AST.Unary do
+  @type t :: %__MODULE__{operator: operator(), value: Caffe.AST.t()}
   @type operator :: :+ | :- | :!
 
   defstruct [:operator, :value]
 
   def new(operator, value), do: %__MODULE__{operator: operator, value: value}
 
-  defimpl Runic.AST do
+  defimpl Caffe.AST do
     import Inspect.Algebra
 
     def to_doc(%{operator: operator} = unary) when operator in [:+, :-] do
@@ -180,7 +180,7 @@ defmodule Runic.AST.Unary do
       # prevent generating code like `--foo`, instead generating `- -foo` which is fine for js
       sep =
         case unary.value do
-          %Runic.AST.Unary{} -> " "
+          %Caffe.AST.Unary{} -> " "
           _ -> empty()
         end
 
@@ -188,7 +188,7 @@ defmodule Runic.AST.Unary do
         concat([
           to_string(unary.operator),
           sep,
-          Runic.AST.to_doc(unary.value)
+          Caffe.AST.to_doc(unary.value)
         ])
       )
     end
@@ -197,18 +197,18 @@ defmodule Runic.AST.Unary do
       group(
         concat([
           to_string(unary.operator),
-          Runic.AST.to_doc(unary.value)
+          Caffe.AST.to_doc(unary.value)
         ])
       )
     end
   end
 end
 
-defmodule Runic.AST.Binary do
+defmodule Caffe.AST.Binary do
   @type t :: %__MODULE__{
           operator: operator(),
-          left: Runic.AST.t(),
-          right: Runic.AST.t()
+          left: Caffe.AST.t(),
+          right: Caffe.AST.t()
         }
   @type operator ::
           :** | :* | :/ | :+ | :- | :< | :> | :<= | :>= | :== | :!= | :=== | :!== | :&& | :||
@@ -217,38 +217,38 @@ defmodule Runic.AST.Binary do
 
   def new(operator, left, right), do: %__MODULE__{operator: operator, left: left, right: right}
 
-  defimpl Runic.AST do
+  defimpl Caffe.AST do
     import Inspect.Algebra
 
     def to_doc(binary) do
       group(
         concat([
-          Runic.AST.to_doc(binary.left),
+          Caffe.AST.to_doc(binary.left),
           " #{binary.operator} ",
-          Runic.AST.to_doc(binary.right)
+          Caffe.AST.to_doc(binary.right)
         ])
       )
     end
   end
 end
 
-defmodule Runic.AST.Access do
-  @type t :: %__MODULE__{root: Runic.AST.t(), key: Runic.AST.t(), type: type()}
+defmodule Caffe.AST.Access do
+  @type t :: %__MODULE__{root: Caffe.AST.t(), key: Caffe.AST.t(), type: type()}
   @type type :: :dot | :brakcet
 
   defstruct [:root, :key, :type]
 
   def new(root, key, type \\ :dot), do: %__MODULE__{root: root, key: key, type: type}
 
-  defimpl Runic.AST do
+  defimpl Caffe.AST do
     import Inspect.Algebra
 
     def to_doc(%{type: :dot} = access) do
       group(
         concat([
-          Runic.AST.to_doc(access.root),
+          Caffe.AST.to_doc(access.root),
           ".",
-          Runic.AST.to_doc(access.key)
+          Caffe.AST.to_doc(access.key)
         ])
       )
     end
@@ -256,9 +256,9 @@ defmodule Runic.AST.Access do
     def to_doc(%{type: :bracket} = access) do
       group(
         concat([
-          Runic.AST.to_doc(access.root),
+          Caffe.AST.to_doc(access.root),
           "[",
-          Runic.AST.to_doc(access.key),
+          Caffe.AST.to_doc(access.key),
           "]"
         ])
       )
@@ -266,24 +266,24 @@ defmodule Runic.AST.Access do
   end
 end
 
-defmodule Runic.AST.Call do
-  @type t :: %__MODULE__{name: Runic.AST.t(), args: [Runic.AST.t()], no_parens: boolean()}
+defmodule Caffe.AST.Call do
+  @type t :: %__MODULE__{name: Caffe.AST.t(), args: [Caffe.AST.t()], no_parens: boolean()}
 
   defstruct [:name, :args, :no_parens]
 
   def new(name, args, opts \\ []),
     do: %__MODULE__{name: name, args: args, no_parens: Keyword.get(opts, :no_parens, false)}
 
-  defimpl Runic.AST do
+  defimpl Caffe.AST do
     import Inspect.Algebra
 
     def to_doc(call) do
       opts = %Inspect.Opts{limit: :infinity}
-      fun = fn e, _opts -> Runic.AST.to_doc(e) end
+      fun = fn e, _opts -> Caffe.AST.to_doc(e) end
 
       group(
         concat([
-          Runic.AST.to_doc(call.name),
+          Caffe.AST.to_doc(call.name),
           container_doc("(", call.args, ")", opts, fun)
         ])
       )
@@ -291,14 +291,14 @@ defmodule Runic.AST.Call do
   end
 end
 
-defmodule Runic.AST.Function do
+defmodule Caffe.AST.Function do
   @type t :: %__MODULE__{
-          mod: Runic.AST.Identifier.t(),
+          mod: Caffe.AST.Identifier.t(),
           name: atom(),
           arity: non_neg_integer(),
           params: [param()],
-          guard: Runic.AST.t() | nil,
-          body: Runic.AST.Block.t(),
+          guard: Caffe.AST.t() | nil,
+          body: Caffe.AST.Block.t(),
           async: boolean(),
           receiver: boolean(),
           exported: boolean()

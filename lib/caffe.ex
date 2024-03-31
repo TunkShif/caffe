@@ -1,14 +1,14 @@
-defmodule Runic do
+defmodule Caffe do
   @moduledoc """
-  Documentation for `Runic`.
+  Documentation for `Caffe`.
   """
 
   defmacro __using__(_) do
     quote do
       Module.register_attribute(__MODULE__, :runic_function, accumulate: true)
-      @before_compile Runic.Builder
+      @before_compile Caffe.Builder
 
-      import Runic, only: [defun: 2, defun: 3, defunp: 2, defunp: 3]
+      import Caffe, only: [defun: 2, defun: 3, defunp: 2, defunp: 3]
     end
   end
 
@@ -18,7 +18,7 @@ defmodule Runic do
     quote do
       @runic_function unquote(Macro.escape({head, body, opts}))
       def unquote(head) do
-        raise "Runic module function cannot be called in BEAM runtime."
+        raise "Caffe module function cannot be called in BEAM runtime."
         unquote(body)
       end
     end
