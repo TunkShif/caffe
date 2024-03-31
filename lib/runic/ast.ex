@@ -117,12 +117,13 @@ end
 defmodule Runic.AST.Identifier do
   # An identifier node represents a variable (like `foo`) or a module name (like `:mod` or `Mod`).
   @type t ::
-          %__MODULE__{type: :var, value: atom()}
-          | %__MODULE__{type: :mod, value: atom()}
+          %__MODULE__{type: :var, value: atom(), counter: integer() | nil}
+          | %__MODULE__{type: :mod, value: atom(), counter: nil}
 
-  defstruct [:type, :value]
+  defstruct [:type, :value, :counter]
 
-  def new(type, value), do: %__MODULE__{type: type, value: value}
+  def new(type, value, counter \\ nil),
+    do: %__MODULE__{type: type, value: value, counter: counter}
 
   defimpl Runic.AST do
     def to_doc(%{type: :var} = identifier) do

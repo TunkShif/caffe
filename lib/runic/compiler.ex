@@ -5,12 +5,15 @@ defmodule Runic.Compiler do
     @moduledoc false
 
     @type t :: %__MODULE__{
+            mod: atom(),
             env: Macro.Env.t(),
             parent: atom(),
             branch: :left | :right | nil
           }
 
     defstruct [
+      # the current compiling module
+      :mod,
       # the current compiling environment
       :env,
       # track the operator of the parent node
@@ -21,18 +24,14 @@ defmodule Runic.Compiler do
 
     def new(mod: mod) when is_atom(mod) do
       if function_exported?(mod, :__runic_env__, 0) do
-        %__MODULE__{
-          env: mod.__runic_env__()
-        }
+        %__MODULE__{mod: mod, env: mod.__runic_env__()}
       else
         raise "#{inspect(mod)} is not a Runic module."
       end
     end
 
     def new(env: %Macro.Env{} = env) do
-      %__MODULE__{
-        env: env
-      }
+      %__MODULE__{env: env}
     end
   end
 
@@ -40,14 +39,22 @@ defmodule Runic.Compiler do
   Compiles a quoted expression into JavaScript code.
   """
   @spec compile_quoted(Macro.t(), Macro.Env.t()) :: String.t()
-  def compile_quoted(quoted, env) do
-    context = Context.new(env: env)
+  def compile_quoted(quoted, env), do: transform(quoted, env) |> codegen()
 
+  @doc """
+  Transforms quoted expression into Runic AST.
+  """
+  @spec transform(Macro.t(), Macro.Env.t()) :: Runic.AST.t()
+  def transform(quoted, env) do
+    context = Context.new(env: env)
     compile(quoted, context)
-    |> codegen()
   end
 
-  defp codegen(ast, opts \\ []),
+  @doc """
+  Generate JavaScript code from Runic AST.
+  """
+  @spec codegen(Runic.AST.t()) :: String.t()
+  def codegen(ast, opts \\ []),
     do:
       Runic.AST.to_doc(ast)
       |> Inspect.Algebra.format(opts[:width] || 120)
@@ -62,8 +69,8 @@ defmodule Runic.Compiler do
   defp compile({fst, snd}, ctx), do: compile_literal([fst, snd], ctx)
 
   # Compiles variables which have AST like: `{identifier, meta, context}`
-  defp compile({name, _meta, context}, ctx) when is_atom(name) and is_atom(context),
-    do: compile_identifier(:var, name, ctx)
+  defp compile({name, meta, context}, ctx) when is_atom(name) and is_atom(context),
+    do: compile_identifier(:var, name, meta[:counter], ctx)
 
   # All the left code structures are just function calls,
   # which have AST like: `{fun, meta, args}`
@@ -114,8 +121,23 @@ defmodule Runic.Compiler do
   defp compile({fun, _meta, args} = ast, ctx) when fun in @builtins and is_list(args),
     do: compile_builtin(ast, ctx)
 
+  # Compiles qualified Kernel function calls
+  defp compile(
+         {{:., _, [{:__aliases__, _, _args} = aliases, fun]}, meta, args} = ast,
+         ctx
+       ) do
+    mod = Macro.expand(aliases, ctx.env)
+
+    if mod in [Kernel, Kernel.SpecialForms] do
+      compile_builtin({fun, meta, args}, ctx)
+    else
+      compile_external(ast, ctx)
+    end
+  end
+
   # Compiles all other function calls 
-  defp compile({_fun, _meta, args} = ast, ctx) when is_list(args), do: compile_external(ast, ctx)
+  defp compile({_fun, _meta, args} = ast, ctx) when is_list(args),
+    do: compile_external(ast, ctx)
 
   # Compiles tuple and map literals
   @constructors [:{}, :%{}]
@@ -124,7 +146,7 @@ defmodule Runic.Compiler do
 
   # Compiles aliased module name
   defp compile_builtin({:__aliases__, _meta, _args} = ast, ctx),
-    do: compile_identifier(:mod, Macro.expand(ast, ctx.env), ctx)
+    do: compile_identifier(:mod, Macro.expand(ast, ctx.env), nil, ctx)
 
   # Compiles code block
   defp compile_builtin({:__block__, _meta, body}, ctx), do: compile_block(body, ctx)
@@ -163,8 +185,12 @@ defmodule Runic.Compiler do
 
   # Expand some macros from Kernel module
   @kernel_macros [:|>, :if, :unless, :tap, :then, :match?]
-  defp compile_builtin({name, _meta, _args} = ast, ctx) when name in @kernel_macros,
+  defp compile_builtin({fun, _meta, [_arg1, _arg2]} = ast, ctx) when fun in @kernel_macros,
     do: Macro.expand(ast, ctx.env) |> compile(ctx)
+
+  # TODO: better error message
+  # defp compile_builtin({fun, _meta, args}, _ctx),
+  #   do: raise("Unknown builtin function #{fun}/#{length(args)}.")
 
   # Compiles bracket access syntax
   # bracket access like `foo[:bar]` is expanded to `Access.get(foo, :bar)`
@@ -176,7 +202,8 @@ defmodule Runic.Compiler do
     end
   end
 
-  defp compile_external({name, meta, args}, ctx), do: compile_call(name, args, meta, ctx)
+  defp compile_external({name, meta, args}, ctx),
+    do: compile_call(name, args, meta, ctx)
 
   defp compile_literal(term, _ctx) when is_primitive(term), do: AST.Literal.new(term)
 
@@ -193,7 +220,7 @@ defmodule Runic.Compiler do
         Enum.map(args, fn {k, v} -> {compile(k, ctx), compile(v, ctx)} end)
       )
 
-  defp compile_identifier(type, name, _ctx), do: AST.Identifier.new(type, name)
+  defp compile_identifier(type, name, counter, _ctx), do: AST.Identifier.new(type, name, counter)
 
   defp compile_block(body, ctx), do: compile_block(body, [], ctx)
   defp compile_block([], _acc, _ctx), do: AST.Block.new([])
