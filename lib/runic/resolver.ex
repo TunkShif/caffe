@@ -55,8 +55,6 @@ defimpl Runic.Resolver, for: Runic.AST.Access do
 end
 
 defimpl Runic.Resolver, for: Runic.AST.Call do
-  # Dot access like `foo.bar` is always parsed as a function call without parentheses,
-  # but we always see it as a field access rather than a function call
   def resolve(%{name: %Runic.AST.Access{} = access, no_parens: true}) do
     Runic.Resolver.resolve(access)
   end

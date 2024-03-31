@@ -5,15 +5,12 @@ defmodule Runic.Compiler do
     @moduledoc false
 
     @type t :: %__MODULE__{
-            mod: atom(),
             env: Macro.Env.t(),
             parent: atom(),
             branch: :left | :right | nil
           }
 
     defstruct [
-      # the current compiling module
-      :mod,
       # the current compiling environment
       :env,
       # track the operator of the parent node
@@ -25,7 +22,6 @@ defmodule Runic.Compiler do
     def new(mod: mod) when is_atom(mod) do
       if function_exported?(mod, :__runic_env__, 0) do
         %__MODULE__{
-          mod: mod,
           env: mod.__runic_env__()
         }
       else
@@ -35,7 +31,6 @@ defmodule Runic.Compiler do
 
     def new(env: %Macro.Env{} = env) do
       %__MODULE__{
-        mod: nil,
         env: env
       }
     end
@@ -49,11 +44,8 @@ defmodule Runic.Compiler do
     context = Context.new(env: env)
 
     compile(quoted, context)
-    |> resolve()
     |> codegen()
   end
-
-  defp resolve(ast), do: Runic.Resolver.resolve(ast)
 
   defp codegen(ast, opts \\ []),
     do:
@@ -308,11 +300,20 @@ defmodule Runic.Compiler do
 
   # Non-qualified function call like `fun()`
   defp compile_call(name, args, meta, ctx) when is_atom(name),
-    do: AST.Call.new(AST.Identifier.new(:var, name), Enum.map(args, &compile(&1, ctx)), meta)
+    do:
+      AST.Call.new(AST.Identifier.new(:var, name), Enum.map(args, &compile(&1, ctx)), meta)
+      |> resolve_call()
 
   # All other calls
   defp compile_call(name, args, meta, ctx),
-    do: AST.Call.new(compile(name, ctx), Enum.map(args, &compile(&1, ctx)), meta)
+    do:
+      AST.Call.new(compile(name, ctx), Enum.map(args, &compile(&1, ctx)), meta)
+      |> resolve_call()
+
+  # Dot access like `foo.bar` is always parsed as a function call without parentheses,
+  # but we always see it as a field access rather than a function call
+  defp resolve_call(%AST.Call{name: %AST.Access{} = access, no_parens: true}), do: access
+  defp resolve_call(%AST.Call{} = call), do: call
 
   defp precedences, do: @precedences
   defp get_precedence(op), do: Map.get(precedences(), op, {:unary, 0})
