@@ -131,8 +131,8 @@ defmodule Caffe.AST.Identifier do
     end
 
     def to_doc(%{type: :mod} = identifier) do
-      # TODO: format module name
-      inspect(identifier.value)
+      # TODO: format module name and only Elixir module can be used
+      inspect(identifier.value) |> String.replace(".", "$")
     end
   end
 end
